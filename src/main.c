@@ -48,6 +48,15 @@ typedef struct buttons_buffer
 static buttons_buffer_t buttons = { 0 };
 //buttons is global
 
+// typedef struct Mouse
+// {
+//     SemaphoreHandle_t lock;
+//     signed char left_button;
+//     signed char right_button;
+//     signed char middle_button;
+//     signed short x;
+//     signed short y;
+// }mouse_t;
 
 void xGetButtonInput(void)
 {
@@ -121,16 +130,20 @@ void vDemoTask(void *pvParameters)
 
     char str1[12] = "Hello World";
     char str2[11] = "Hello ESPL";
+    char mouse_Xcoord[20];
+    char mouse_Ycoord[20];
+    char mouse_coord[20];
+    signed short Mouse_Xcoord;
+    signed short Mouse_Ycoord;
+    
 
     int PressTimesA = 0;
     int PressTimesB = 0;
     int PressTimesC = 0;
     int PressTimesD = 0;
+    // static mouse_t mouse;
 
-    signed char MouseLeft = 0;
-    signed char MouseMiddle = 0;
-    signed char MouseRight = 0;
-
+   
     static  const TickType_t debounceDelay = 5;
     TickType_t last_change = xTaskGetTickCount();
 
@@ -189,19 +202,50 @@ void vDemoTask(void *pvParameters)
                      }
                     xSemaphoreGive(buttons.lock);
                  }
-                
-                MouseLeft = gfxEventGetMouseLeft();
-                MouseMiddle = gfxEventGetMouseMiddle();
-                MouseRight = gfxEventGetMouseRight();
-                if (MouseLeft == 1 ||  MouseMiddle==1 || MouseRight==1)
+                 
+                 if(xTaskGetTickCount()-last_change > debounceDelay)
                 {
-                     PressTimesA = 0;
-                     PressTimesB = 0;
-                     PressTimesC = 0;
-                     PressTimesD = 0;
-
+                // if (xSemaphoreTake(mouse.lock,0)==pdTRUE)
+                // {
+                        /*mouse.*/signed char left_button = gfxEventGetMouseLeft();
+                        /*mouse.*/signed char middle_button = gfxEventGetMouseMiddle();
+                        /*mouse.*/signed char right_button = gfxEventGetMouseRight();
+                        if (/*mouse.*/left_button  || /*mouse.*/middle_button || /*mouse.*/right_button)
+                        {
+                            PressTimesA = 0;
+                            PressTimesB = 0;
+                            PressTimesC = 0;
+                            PressTimesD = 0;
+                            // mouse.x = gfxEventGetMouseX();
+                            // mouse.y = gfxEventGetMouseY();
+                            // sprintf(mouse_Xcoord,"%hd",mouse.x);
+                            // sprintf(mouse_Ycoord,"%hd",mouse.y);
+                            // strcpy(mouse_coord,mouse_Xcoord);
+                            // strcpy(mouse_coord,mouse_Ycoord);
+                            last_change = xTaskGetTickCount();
+                        }
+                       
+                //         xSemaphoreGive(mouse.lock);
+                // }
                 }
+                        Mouse_Xcoord = gfxEventGetMouseX();
+                        Mouse_Ycoord = gfxEventGetMouseY();
+                        Xcoord_rotateC = Mouse_Xcoord;
+                        Ycoord_rotateC = Mouse_Ycoord;
+                        Triangle_Points[0].x = Xcoord_rotateC - 50;
+                        Triangle_Points[1].x = Xcoord_rotateC;
+                        Triangle_Points[2].x = Xcoord_rotateC + 50;
 
+                        Triangle_Points[0].y = Ycoord_rotateC - 50;
+                        Triangle_Points[2].y = Ycoord_rotateC - 50;
+                        Triangle_Points[1].y = Ycoord_rotateC + 50;
+                        sprintf(mouse_coord,"%hd,%hd",Mouse_Xcoord,Mouse_Ycoord);
+                        //sprintf(mouse_Ycoord,"%hd",);
+                        //strcpy(mouse_coord,mouse_Xcoord);
+                        //strcpy(mouse_coord,mouse_Ycoord);
+
+
+       
                 gfxDrawClear(White); // Clear screen
                 theta = theta + 0.2; // rotation angle theta
                 double c = cos(theta);
@@ -229,7 +273,8 @@ void vDemoTask(void *pvParameters)
                     XString_Left = XString_Left + speed;
                     if(XString_Left + string_width >= SCREEN_WIDTH)
                     {
-                        MoveDirection = 1;
+                        MoveDirection = 1;                       strcpy(mouse_coord,mouse_Xcoord);
+                        strcpy(mouse_coord,mouse_Ycoord);
                     }
                 }
                 else
@@ -247,7 +292,21 @@ void vDemoTask(void *pvParameters)
 
                 }
 
-                gfxDrawCircle(Xcoord_Circle_Centre,Ycoord_Circle_Centre,radius,Gray);
+                if (!gfxGetTextSize((char*)mouse_coord, &string_width, &string_height))
+                { 
+                        gfxDrawText(mouse_coord,Mouse_Xcoord, Mouse_Ycoord+50,Black);
+                        
+                    
+                }
+                // if (!gfxGetTextSize((char*)mouse_coord, &string_width, &string_height))
+                // {   
+                //     if(xSemaphoreTake(mouse.lock,0)==pdTRUE)
+                //     {
+                //         gfxDrawText(mouse_coord,mouse.x,mouse.y,Black);
+                //         xSemaphoreGive(mouse.lock);
+                //     }
+                // }
+                 gfxDrawCircle(Xcoord_Circle_Centre,Ycoord_Circle_Centre,radius,Gray);
                 gfxDrawFilledBox(Xcoord_Square_LP,Ycoord_Square_LP,Square_Width,Square_Height,Blue);
                 gfxDrawTriangle(Triangle_Points, Green);
                 gfxDrawUpdateScreen(); // Refresh the screen to draw string
