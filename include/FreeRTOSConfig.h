@@ -65,6 +65,10 @@
  *----------------------------------------------------------*/
 
 #include <stdint.h>
+// #include "FreeRTOS.h"
+// #include "portmacro.h"
+// #include "stdint.h"
+
 
 #define configUSE_PREEMPTION            1
 #define configUSE_IDLE_HOOK             1
@@ -89,7 +93,7 @@
 #define configQUEUE_REGISTRY_SIZE       0
 #define configMAX_SYSCALL_INTERRUPT_PRIORITY    1
 #define configSUPPORT_STATIC_ALLOCATION 1
-#define configSUPPORT_DYNAMIC_ALLOCATION 1
+// #define configSUPPORT_DYNAMIC_ALLOCATION 1
 
 #define configMAX_PRIORITIES        ( 10 )
 #define configMAX_CO_ROUTINE_PRIORITIES ( 2 )
@@ -113,4 +117,10 @@ extern void vMainQueueSendPassed(void);
 
 #define configGENERATE_RUN_TIME_STATS       1
 
+
+
+
+// void vApplicationGetIdleTaskMemory( StaticTask_t **ppxIdleTaskTCBBuffer,
+//                                     StackType_t **ppxIdleTaskStackBuffer,
+//                                     uint32_t *pulIdleTaskStackSize);
 #endif /* FREERTOS_CONFIG_H */

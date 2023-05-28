@@ -19,7 +19,8 @@
 #include "gfx_utils.h"
 #include "gfx_FreeRTOS_utils.h"
 #include "gfx_print.h"
-
+#include "draw.h"
+#include <math.h>
 #ifdef TRACE_FUNCTIONS
 #include "tracer.h"
 #endif
@@ -28,8 +29,9 @@
 
 #define mainGENERIC_PRIORITY (tskIDLE_PRIORITY)
 #define mainGENERIC_STACK_SIZE ((unsigned short)2560)
+#define STACK_SIZE 2560
 #define STATE_QUEUE_LENGTH 1
-#include <math.h>
+
 #define Gray   (unsigned int)(0x808080)
 #define Blue   (unsigned int)(0x0000FF)
 #define Green   (unsigned int)(0x00FF00)
@@ -41,10 +43,15 @@
 #define PREV_TASK 0
 #define STATE_COUNT 2
 
+static StaticTask_t TaskControlBlock; 
+// The structure to hold the task control block of the statically created task
+static StackType_t  Stack_Buffer[STACK_SIZE];//The statically created task use this buffer as its stack
+
 static TaskHandle_t BufferSwap = NULL;
 static TaskHandle_t StateMachine = NULL;
 static TaskHandle_t Exercise_two = NULL;
 static TaskHandle_t Exercise_three = NULL;
+static TaskHandle_t Second_toggle_cir = NULL;
 static TaskHandle_t Exercise_four = NULL;
 
 static QueueHandle_t StateQueue = NULL;
@@ -130,7 +137,7 @@ void vSwapBuffers(void *pvParameters)
 {
     TickType_t xLastWakeTime;
     xLastWakeTime = xTaskGetTickCount();
-    const TickType_t frameratePeriod = 20;
+    const TickType_t frameratePeriod = 50;
 
     while (1) {
         gfxDrawUpdateScreen();
@@ -184,6 +191,10 @@ void SequentialStateMachine(void *pvParameters)
                     {
                         vTaskSuspend(Exercise_three);
                     }
+                    if(Second_toggle_cir)
+                    {
+                        vTaskSuspend(Second_toggle_cir);
+                    }
                     if(Exercise_four)
                     {
                         vTaskSuspend(Exercise_four);
@@ -197,6 +208,10 @@ void SequentialStateMachine(void *pvParameters)
                     if(Exercise_three)
                     {
                         vTaskResume(Exercise_three);
+                    }
+                    if(Second_toggle_cir)
+                    {
+                        vTaskResume(Second_toggle_cir);
                     }
                     if(Exercise_four)
                     {
@@ -227,13 +242,25 @@ void SequentialStateMachine(void *pvParameters)
 
 void ExerciseThree(void *pvParameters)
 {
-     gfxDrawBindThread();
+    signed short Xcoord_Circle_Centre = SCREEN_WIDTH/2;  
+    signed short Ycoord_Circle_Centre = SCREEN_HEIGHT/2;
+    signed short radius = 100;
+    TickType_t Delay = 500;
+     
+    gfxDrawBindThread();
       while (1) 
     {
         if (DrawSignal) // To verify if there is a semaphore handle
         {
-            if (xSemaphoreTake(DrawSignal, portMAX_DELAY) == pdTRUE){
+            if (xSemaphoreTake(DrawSignal, portMAX_DELAY) == pdTRUE)
+            {
+
+                gfxDrawCircle(Xcoord_Circle_Centre,Ycoord_Circle_Centre,radius,Blue);
+                vDrawFPS();
+                vTaskDelay(Delay);
                 gfxDrawClear(White); // Clear screen
+                vDrawFPS();
+                vTaskDelay(Delay);
                 gfxDrawUpdateScreen();
                 gfxEventFetchEvents(FETCH_EVENT_NONBLOCK); 
                 xGetButtonInput();
@@ -244,6 +271,39 @@ void ExerciseThree(void *pvParameters)
     }
 
 }
+
+void SecondToggleCircle(void *pvParameters)
+{
+    signed short Xcoord_Circle_Centre = SCREEN_WIDTH/2;  
+    signed short Ycoord_Circle_Centre = SCREEN_HEIGHT/2;
+    signed short radius = 100;
+    TickType_t Delay = 250;
+     
+    gfxDrawBindThread();
+      while (1) 
+    {
+        if (DrawSignal) // To verify if there is a semaphore handle
+        {
+            if (xSemaphoreTake(DrawSignal, portMAX_DELAY) == pdTRUE)
+            {
+
+                gfxDrawCircle(Xcoord_Circle_Centre,Ycoord_Circle_Centre,radius,Black);
+                vDrawFPS();
+                vTaskDelay(Delay);
+                gfxDrawClear(White); // Clear screen
+                vDrawFPS();
+                vTaskDelay(Delay);
+                gfxDrawUpdateScreen();
+                gfxEventFetchEvents(FETCH_EVENT_NONBLOCK); 
+                xGetButtonInput();
+            }
+            CheckStateInput();  
+        }
+        
+    }
+
+}
+
 
 void ExerciseTwo(void *pvParameters)
 {
@@ -452,6 +512,7 @@ void ExerciseTwo(void *pvParameters)
                 gfxDrawCircle(Xcoord_Circle_Centre,Ycoord_Circle_Centre,radius,Gray);
                 gfxDrawFilledBox(Xcoord_Square_LP,Ycoord_Square_LP,Square_Width,Square_Height,Blue);
                 gfxDrawTriangle(Triangle_Points, Green);
+                vDrawFPS();
                 gfxDrawUpdateScreen(); // Refresh the screen to draw string
 
                 CheckStateInput();
@@ -528,6 +589,7 @@ int main(int argc, char *argv[])
         goto err_demotask;
     }
 
+
     if (xTaskCreate(SequentialStateMachine, "StateMachine", mainGENERIC_STACK_SIZE * 2, NULL,
                     configMAX_PRIORITIES-1, &StateMachine) != pdPASS) {
         PRINT_TASK_ERROR("StateMachine");
@@ -540,10 +602,15 @@ int main(int argc, char *argv[])
         PRINT_TASK_ERROR("BufferSwapTask");
         goto err_bufferswap;
     }
+     
+    Second_toggle_cir = xTaskCreateStatic(SecondToggleCircle, "SecondToggleCircle",STACK_SIZE, NULL,
+                    mainGENERIC_PRIORITY,Stack_Buffer,&TaskControlBlock);
+    
 
 
     vTaskSuspend(Exercise_two);
-    vTaskSuspend(Exercise_three); // Task is created in a ready state 
+    vTaskSuspend(Exercise_three); 
+    vTaskSuspend(Second_toggle_cir);// Task is created in a ready state 
     // Because we should have the state machine to decide which tasks are ready or suspended
     // So we suspend all other tasks to let the state machine run
     vTaskStartScheduler();

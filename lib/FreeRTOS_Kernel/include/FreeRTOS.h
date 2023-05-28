@@ -69,6 +69,7 @@
     #define configUSE_NEWLIB_REENTRANT    0
 #endif
 
+
 /* Required if struct _reent is used. */
 #if ( configUSE_NEWLIB_REENTRANT == 1 )
 
