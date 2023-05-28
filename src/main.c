@@ -28,15 +28,28 @@
 
 #define mainGENERIC_PRIORITY (tskIDLE_PRIORITY)
 #define mainGENERIC_STACK_SIZE ((unsigned short)2560)
+#define STATE_QUEUE_LENGTH 1
 #include <math.h>
 #define Gray   (unsigned int)(0x808080)
 #define Blue   (unsigned int)(0x0000FF)
 #define Green   (unsigned int)(0x00FF00)
-static TaskHandle_t DemoTask = NULL;
+#define StateOne 0
+#define StateTwo 1
+#define StateThree 2
+#define StartingState StateOne
+#define NEXT_TASK 1
+#define PREV_TASK 0
+#define STATE_COUNT 2
+
 static TaskHandle_t BufferSwap = NULL;
+static TaskHandle_t StateMachine = NULL;
+static TaskHandle_t Exercise_two = NULL;
+static TaskHandle_t Exercise_three = NULL;
+static TaskHandle_t Exercise_four = NULL;
+
+static QueueHandle_t StateQueue = NULL;
 
 SemaphoreHandle_t DrawSignal = NULL;
-
 
 typedef struct buttons_buffer 
 {
@@ -46,17 +59,8 @@ typedef struct buttons_buffer
 } buttons_buffer_t;
 
 static buttons_buffer_t buttons = { 0 };
-//buttons is global
 
-// typedef struct Mouse
-// {
-//     SemaphoreHandle_t lock;
-//     signed char left_button;
-//     signed char right_button;
-//     signed char middle_button;
-//     signed short x;
-//     signed short y;
-// }mouse_t;
+//buttons is global
 
 void xGetButtonInput(void)
 {
@@ -65,6 +69,60 @@ void xGetButtonInput(void)
     {
         xQueueReceive(buttonInputQueue, &buttons.buttons, 0);
         xSemaphoreGive(buttons.lock);
+    }
+}
+
+int CheckStateInput(void)
+{
+    unsigned char NextStateSignal = NEXT_TASK;
+    
+    if(xSemaphoreTake(buttons.lock,0)==pdTRUE)
+    {
+    
+        if(buttons.buttons[KEYCODE(E)])
+        { buttons.buttons[KEYCODE(E)] = 0;
+            
+            if(StateQueue)
+                {
+                    xSemaphoreGive(buttons.lock);
+                    xQueueSend(StateQueue,&NextStateSignal,0);
+                    return 0;
+                }
+        }
+        
+        //}
+
+        xSemaphoreGive(buttons.lock); 
+    }
+    return -1; 
+}
+
+void changeState(unsigned char* state, unsigned char change)
+{
+    switch (change)
+    {
+    case NEXT_TASK:
+        if(*state == STATE_COUNT-1)
+        {
+            *state = 0;
+        }
+        else
+        {
+            (*state)++;
+        }
+        break;
+    case PREV_TASK:
+        if(*state == 0)
+        {
+            *state = STATE_COUNT-1;
+        }
+        else
+        {
+            (*state)--;
+        }
+        break;
+    default:
+        break;
     }
 }
 
@@ -82,20 +140,114 @@ void vSwapBuffers(void *pvParameters)
     }
 }
 
-void vDemoTask(void *pvParameters)
+void SequentialStateMachine(void *pvParameters)
 {
-    // structure to store time retrieved from Linux kernel
-    // static struct timespec the_time;
-    // static char our_timebuttons_buffer _string[100];
-    // static int our_time_strings_width = 0;
-    // Needed such that Gfx library knows which thread controlls drawing
-    // Only one thread can call gfxDrawUpdateScreen while and thread can call
-    // the drawing functions to draw objects. This is a limitation of the SDL
-    // backend.
-    // static struct timespec the_time;
-   
-    // static char our_time_string[100];
-  
+    unsigned char current_state =  StartingState;
+    unsigned char state_changed = 1;
+    unsigned char input = 0;
+    // static  const TickType_t debounceDelay = 5;
+    // TickType_t last_change = xTaskGetTickCount();
+    
+    while (1)
+    {   
+        if(state_changed)
+        {
+            goto handle_state; // firstly handle current state
+        }
+       
+        if(StateQueue)
+        {
+            //printf("StateQueue checked\n");
+            if(xQueueReceive(StateQueue,&input,portMAX_DELAY)==pdTRUE) 
+            //receive data from StateQueue and store it in input
+            {
+                //if(xTaskGetTickCount()-last_change>debounceDelay)
+                //{
+                    changeState(&current_state,input);
+                    state_changed = 1;
+                    //last_change = xTaskGetTickCount();
+                //}
+                    
+            }
+        }
+    handle_state:
+        if(state_changed)
+        {
+            switch (current_state)
+            {
+                case (StateOne): 
+                    if(Exercise_two)
+                    {
+                        vTaskResume(Exercise_two);
+                    }
+                    if(Exercise_three)
+                    {
+                        vTaskSuspend(Exercise_three);
+                    }
+                    if(Exercise_four)
+                    {
+                        vTaskSuspend(Exercise_four);
+                    }
+                    break;
+                case (StateTwo): // State2 corresponds to exercise3
+                    if(Exercise_two)
+                    {
+                        vTaskSuspend(Exercise_two);
+                    }
+                    if(Exercise_three)
+                    {
+                        vTaskResume(Exercise_three);
+                    }
+                    if(Exercise_four)
+                    {
+                        vTaskSuspend(Exercise_four);
+                    }
+                    break;
+                // case (StateThree):
+                //     if(Exercise_two)
+                //     {
+                //         vTaskSuspend(Exercise_two);
+                //     }
+                //     if(Exercise_three)
+                //     {
+                //         vTaskSuspend(Exercise_three);
+                //     }
+                //     if(Exercise_four)
+                //     {
+                //         vTaskResume(Exercise_four);
+                //     }
+                //     break;
+                default:
+                    break;
+            }
+            state_changed = 0;
+        } 
+    }
+}
+
+void ExerciseThree(void *pvParameters)
+{
+     gfxDrawBindThread();
+      while (1) 
+    {
+        if (DrawSignal) // To verify if there is a semaphore handle
+        {
+            if (xSemaphoreTake(DrawSignal, portMAX_DELAY) == pdTRUE){
+                gfxDrawClear(White); // Clear screen
+                gfxDrawUpdateScreen();
+                gfxEventFetchEvents(FETCH_EVENT_NONBLOCK); 
+                xGetButtonInput();
+            }
+            CheckStateInput();  
+        }
+        
+    }
+
+}
+
+void ExerciseTwo(void *pvParameters)
+{
+ 
     static int string_width = 20;
     static int string_height = 20;
 
@@ -130,8 +282,8 @@ void vDemoTask(void *pvParameters)
 
     char str1[12] = "Hello World";
     char str2[11] = "Hello ESPL";
-    char mouse_Xcoord[20];
-    char mouse_Ycoord[20];
+    //char mouse_Xcoord[20];
+    //char mouse_Ycoord[20];
     char mouse_coord[20];
     signed short Mouse_Xcoord;
     signed short Mouse_Ycoord;
@@ -160,7 +312,7 @@ void vDemoTask(void *pvParameters)
                 //retrieve all outstanding SDL Events. (eg. Pressing Buttons) 
                 //this function is invoked only after taking the semaphore of the queue
              
-                
+                //xGetButtonInput();
                 if (xSemaphoreTake(buttons.lock, 0) == pdTRUE) 
                 {
                     
@@ -205,28 +357,21 @@ void vDemoTask(void *pvParameters)
                  
                  if(xTaskGetTickCount()-last_change > debounceDelay)
                 {
-                // if (xSemaphoreTake(mouse.lock,0)==pdTRUE)
-                // {
-                        /*mouse.*/signed char left_button = gfxEventGetMouseLeft();
-                        /*mouse.*/signed char middle_button = gfxEventGetMouseMiddle();
-                        /*mouse.*/signed char right_button = gfxEventGetMouseRight();
-                        if (/*mouse.*/left_button  || /*mouse.*/middle_button || /*mouse.*/right_button)
+                
+                        signed char left_button = gfxEventGetMouseLeft();
+                        signed char middle_button = gfxEventGetMouseMiddle();
+                        signed char right_button = gfxEventGetMouseRight();
+                        if (left_button  || middle_button || right_button)
                         {
                             PressTimesA = 0;
                             PressTimesB = 0;
                             PressTimesC = 0;
                             PressTimesD = 0;
-                            // mouse.x = gfxEventGetMouseX();
-                            // mouse.y = gfxEventGetMouseY();
-                            // sprintf(mouse_Xcoord,"%hd",mouse.x);
-                            // sprintf(mouse_Ycoord,"%hd",mouse.y);
-                            // strcpy(mouse_coord,mouse_Xcoord);
-                            // strcpy(mouse_coord,mouse_Ycoord);
+                          
                             last_change = xTaskGetTickCount();
                         }
                        
-                //         xSemaphoreGive(mouse.lock);
-                // }
+               
                 }
                         Mouse_Xcoord = gfxEventGetMouseX();
                         Mouse_Ycoord = gfxEventGetMouseY();
@@ -240,10 +385,7 @@ void vDemoTask(void *pvParameters)
                         Triangle_Points[2].y = Ycoord_rotateC - 50;
                         Triangle_Points[1].y = Ycoord_rotateC + 50;
                         sprintf(mouse_coord,"%hd,%hd",Mouse_Xcoord,Mouse_Ycoord);
-                        //sprintf(mouse_Ycoord,"%hd",);
-                        //strcpy(mouse_coord,mouse_Xcoord);
-                        //strcpy(mouse_coord,mouse_Ycoord);
-
+                    
 
        
                 gfxDrawClear(White); // Clear screen
@@ -273,8 +415,9 @@ void vDemoTask(void *pvParameters)
                     XString_Left = XString_Left + speed;
                     if(XString_Left + string_width >= SCREEN_WIDTH)
                     {
-                        MoveDirection = 1;                       strcpy(mouse_coord,mouse_Xcoord);
-                        strcpy(mouse_coord,mouse_Ycoord);
+                        MoveDirection = 1;                       
+                        //strcpy(mouse_coord,mouse_Xcoord);
+                        //strcpy(mouse_coord,mouse_Ycoord);
                     }
                 }
                 else
@@ -306,10 +449,12 @@ void vDemoTask(void *pvParameters)
                 //         xSemaphoreGive(mouse.lock);
                 //     }
                 // }
-                 gfxDrawCircle(Xcoord_Circle_Centre,Ycoord_Circle_Centre,radius,Gray);
+                gfxDrawCircle(Xcoord_Circle_Centre,Ycoord_Circle_Centre,radius,Gray);
                 gfxDrawFilledBox(Xcoord_Square_LP,Ycoord_Square_LP,Square_Width,Square_Height,Blue);
                 gfxDrawTriangle(Triangle_Points, Green);
                 gfxDrawUpdateScreen(); // Refresh the screen to draw string
+
+                CheckStateInput();
             }
     }
 }
@@ -367,8 +512,25 @@ int main(int argc, char *argv[])
         goto err_draw_signal;
     }
 
-    if (xTaskCreate(vDemoTask, "DemoTask", mainGENERIC_STACK_SIZE * 2, NULL,
-                    mainGENERIC_PRIORITY, &DemoTask) != pdPASS) {
+    StateQueue = xQueueCreate(STATE_QUEUE_LENGTH, sizeof(unsigned char));
+    if (!StateQueue) {
+        PRINT_ERROR("Could not open state queue");
+        goto err_state_queue;
+    }
+
+    if (xTaskCreate(ExerciseTwo, "Exercise2", mainGENERIC_STACK_SIZE * 2, NULL,
+                    mainGENERIC_PRIORITY, &Exercise_two) != pdPASS) {
+        goto err_demotask;
+    }
+
+    if (xTaskCreate(ExerciseThree, "Exercise3", mainGENERIC_STACK_SIZE * 2, NULL,
+                    mainGENERIC_PRIORITY, &Exercise_three) != pdPASS) {
+        goto err_demotask;
+    }
+
+    if (xTaskCreate(SequentialStateMachine, "StateMachine", mainGENERIC_STACK_SIZE * 2, NULL,
+                    configMAX_PRIORITIES-1, &StateMachine) != pdPASS) {
+        PRINT_TASK_ERROR("StateMachine");
         goto err_demotask;
     }
 
@@ -379,13 +541,20 @@ int main(int argc, char *argv[])
         goto err_bufferswap;
     }
 
+
+    vTaskSuspend(Exercise_two);
+    vTaskSuspend(Exercise_three); // Task is created in a ready state 
+    // Because we should have the state machine to decide which tasks are ready or suspended
+    // So we suspend all other tasks to let the state machine run
     vTaskStartScheduler();
 
     return EXIT_SUCCESS;
 
+
+// err_statemachine:
 err_bufferswap:
-    vTaskDelete(DemoTask);
-err_demotask:
+    vTaskDelete(Exercise_two);
+err_demotask: err_state_queue:
     vSemaphoreDelete(DrawSignal);
 err_draw_signal:
     gfxSafePrintExit();
@@ -414,7 +583,8 @@ __attribute__((unused)) void vApplicationIdleHook(void)
     struct timespec xTimeToSleep, xTimeSlept;
     /* Makes the process more agreeable when using the Posix simulator. */
     xTimeToSleep.tv_sec = 1;
-    xTimeToSleep.tv_nsec = 0;
+        xSemaphoreGive(buttons.lock); 
+    xTimeToSleep.tv_nsec = 0;state_changed
     nanosleep(&xTimeToSleep, &xTimeSlept);
 #endif
 }

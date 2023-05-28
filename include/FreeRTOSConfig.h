@@ -88,6 +88,8 @@
 #define configUSE_APPLICATION_TASK_TAG  1
 #define configQUEUE_REGISTRY_SIZE       0
 #define configMAX_SYSCALL_INTERRUPT_PRIORITY    1
+#define configSUPPORT_STATIC_ALLOCATION 1
+#define configSUPPORT_DYNAMIC_ALLOCATION 1
 
 #define configMAX_PRIORITIES        ( 10 )
 #define configMAX_CO_ROUTINE_PRIORITIES ( 2 )
@@ -104,6 +106,7 @@
 #define INCLUDE_vTaskDelay                  1
 #define INCLUDE_uxTaskGetStackHighWaterMark 0 /* Do not use this option on the PC port. */
 #define INCLUDE_xTaskGetSchedulerState      1
+
 
 extern void vMainQueueSendPassed(void);
 #define traceQUEUE_SEND( pxQueue ) vMainQueueSendPassed()
