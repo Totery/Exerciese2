@@ -6,7 +6,7 @@
 #include <string.h>
 
 #include <SDL2/SDL_scancode.h>
-
+#include "portmacro.h"
 #include "FreeRTOS.h"
 #include "queue.h"
 #include "semphr.h"
@@ -29,7 +29,7 @@
 
 #define mainGENERIC_PRIORITY (tskIDLE_PRIORITY)
 #define mainGENERIC_STACK_SIZE ((unsigned short)2560)
-#define STACK_SIZE 2560
+#define STACK_SIZE 10
 #define STATE_QUEUE_LENGTH 1
 
 #define Gray   (unsigned int)(0x808080)
@@ -42,6 +42,7 @@
 #define NEXT_TASK 1
 #define PREV_TASK 0
 #define STATE_COUNT 2
+#define TASK_STOP 0
 
 static StaticTask_t TaskControlBlock; 
 // The structure to hold the task control block of the statically created task
@@ -52,7 +53,13 @@ static TaskHandle_t StateMachine = NULL;
 static TaskHandle_t Exercise_two = NULL;
 static TaskHandle_t Exercise_three = NULL;
 static TaskHandle_t Second_toggle_cir = NULL;
-static TaskHandle_t Exercise_four = NULL;
+static TaskHandle_t Display_G = NULL;
+static TaskHandle_t Display_H = NULL;
+static TaskHandle_t Trigger_Display = NULL;
+
+static SemaphoreHandle_t Binary_Sema;
+
+// static TaskHandle_t Exercise_four = NULL;
 
 static QueueHandle_t StateQueue = NULL;
 
@@ -137,7 +144,7 @@ void vSwapBuffers(void *pvParameters)
 {
     TickType_t xLastWakeTime;
     xLastWakeTime = xTaskGetTickCount();
-    const TickType_t frameratePeriod = 50;
+    const TickType_t frameratePeriod = 15;
 
     while (1) {
         gfxDrawUpdateScreen();
@@ -146,6 +153,7 @@ void vSwapBuffers(void *pvParameters)
         vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(frameratePeriod));
     }
 }
+
 
 void SequentialStateMachine(void *pvParameters)
 {
@@ -195,10 +203,26 @@ void SequentialStateMachine(void *pvParameters)
                     {
                         vTaskSuspend(Second_toggle_cir);
                     }
-                    if(Exercise_four)
+                    if(Display_G)
                     {
-                        vTaskSuspend(Exercise_four);
+                        vTaskSuspend(Display_G);
                     }
+                    if(Trigger_Display)
+                    {
+                        vTaskSuspend(Trigger_Display);
+                    }
+                    if(Display_H)
+                    {
+                        vTaskSuspend(Display_H);
+                    }
+                    // if(Increase_Variable)
+                    // {
+                    //     vTaskResume(Increase_Variable);
+                    // }
+                    // if(Exercise_four)
+                    // {
+                    //     vTaskSuspend(Exercise_four);
+                    // }
                     break;
                 case (StateTwo): // State2 corresponds to exercise3
                     if(Exercise_two)
@@ -213,10 +237,26 @@ void SequentialStateMachine(void *pvParameters)
                     {
                         vTaskResume(Second_toggle_cir);
                     }
-                    if(Exercise_four)
+                    if(Display_G)
                     {
-                        vTaskSuspend(Exercise_four);
+                        vTaskResume(Display_G);
                     }
+                    if(Trigger_Display)
+                    {
+                        vTaskResume(Trigger_Display);
+                    }
+                    if(Display_H)
+                    {
+                        vTaskResume(Display_H);
+                    }
+                    // if(Increase_Variable)
+                    // {
+                    //     vTaskSuspend(Increase_Variable);
+                    // }
+                    // if(Exercise_four)
+                    // {
+                    //     vTaskSuspend(Exercise_four);
+                    // }
                     break;
                 // case (StateThree):
                 //     if(Exercise_two)
@@ -244,8 +284,10 @@ void ExerciseThree(void *pvParameters)
 {
     signed short Xcoord_Circle_Centre = SCREEN_WIDTH/2;  
     signed short Ycoord_Circle_Centre = SCREEN_HEIGHT/2;
-    signed short radius = 100;
+    signed short radius = 25;
+    int flag = 1;
     TickType_t Delay = 500;
+    TickType_t last_change = xTaskGetTickCount();
      
     gfxDrawBindThread();
       while (1) 
@@ -254,13 +296,17 @@ void ExerciseThree(void *pvParameters)
         {
             if (xSemaphoreTake(DrawSignal, portMAX_DELAY) == pdTRUE)
             {
-
-                gfxDrawCircle(Xcoord_Circle_Centre,Ycoord_Circle_Centre,radius,Blue);
+                gfxDrawClear(White);
+                if(flag==1)
+                {
+                    gfxDrawCircle(Xcoord_Circle_Centre+4*radius,Ycoord_Circle_Centre,radius,Blue);
+                }
                 vDrawFPS();
-                vTaskDelay(Delay);
-                gfxDrawClear(White); // Clear screen
-                vDrawFPS();
-                vTaskDelay(Delay);
+                if(xTaskGetTickCount()-last_change>=Delay)
+                {
+                    flag = !flag;
+                    last_change = xTaskGetTickCount();
+                }
                 gfxDrawUpdateScreen();
                 gfxEventFetchEvents(FETCH_EVENT_NONBLOCK); 
                 xGetButtonInput();
@@ -269,15 +315,16 @@ void ExerciseThree(void *pvParameters)
         }
         
     }
-
 }
 
 void SecondToggleCircle(void *pvParameters)
 {
     signed short Xcoord_Circle_Centre = SCREEN_WIDTH/2;  
     signed short Ycoord_Circle_Centre = SCREEN_HEIGHT/2;
-    signed short radius = 100;
+    signed short radius = 25;
+    int flag = 1;
     TickType_t Delay = 250;
+    TickType_t last_change = xTaskGetTickCount();
      
     gfxDrawBindThread();
       while (1) 
@@ -286,13 +333,17 @@ void SecondToggleCircle(void *pvParameters)
         {
             if (xSemaphoreTake(DrawSignal, portMAX_DELAY) == pdTRUE)
             {
-
-                gfxDrawCircle(Xcoord_Circle_Centre,Ycoord_Circle_Centre,radius,Black);
+                gfxDrawClear(White);
+                if(flag==1)
+                {
+                    gfxDrawCircle(Xcoord_Circle_Centre-4*radius,Ycoord_Circle_Centre,radius,Black);
+                }
                 vDrawFPS();
-                vTaskDelay(Delay);
-                gfxDrawClear(White); // Clear screen
-                vDrawFPS();
-                vTaskDelay(Delay);
+                if(xTaskGetTickCount()-last_change>=Delay)
+                {
+                    flag = !flag;
+                    last_change = xTaskGetTickCount();
+                }
                 gfxDrawUpdateScreen();
                 gfxEventFetchEvents(FETCH_EVENT_NONBLOCK); 
                 xGetButtonInput();
@@ -303,6 +354,169 @@ void SecondToggleCircle(void *pvParameters)
     }
 
 }
+
+void DisplayG(void *pvParameters)
+{
+    static int string_width = 20;
+    static int string_height = 20;
+    char Counter[50];
+    int counter = 0;
+    signed short xString = SCREEN_WIDTH/2 - 200;
+    signed short yString = SCREEN_HEIGHT/2 + 100;
+    TickType_t last_change = xTaskGetTickCount();
+    TickType_t debounce_delay = 5;
+    gfxDrawBindThread();
+    while(1)
+    {
+            if (xSemaphoreTake(DrawSignal, portMAX_DELAY) == pdTRUE)
+        {
+            xSemaphoreTake(Binary_Sema,portMAX_DELAY);       
+            gfxEventFetchEvents(FETCH_EVENT_NONBLOCK);
+            if(xSemaphoreTake(buttons.lock,0)==pdTRUE)
+            {     
+                if(xQueueReceive(buttonInputQueue, &buttons.buttons, 0) == pdTRUE)
+                {
+                    if(xTaskGetTickCount()-last_change>debounce_delay)
+                    {
+                        if(buttons.buttons[KEYCODE(G)])
+                        {
+                            counter = counter+1;
+                        }
+                        last_change = xTaskGetTickCount();
+                    }
+                }    
+                xSemaphoreGive(buttons.lock);
+            }
+                
+            sprintf(Counter,"Times that G is pressed: %d",counter);
+            if (!gfxGetTextSize(Counter, &string_width, &string_height))
+            {
+                gfxDrawText(Counter,xString ,yString,Black);
+
+            }
+            gfxDrawClear(White);
+
+        }
+        CheckStateInput();
+    }   
+        
+}
+
+
+void TriggerDisplay(void *pvParameters)
+{
+
+    while(1)
+    {
+        gfxEventFetchEvents(FETCH_EVENT_NONBLOCK);   
+        if(xSemaphoreTake(Binary_Sema,0)==pdTRUE)
+        {
+            xGetButtonInput();
+            if(xSemaphoreTake(buttons.lock,0)==pdTRUE)
+            {
+                if(buttons.buttons[KEYCODE(G)])
+                {
+                    xSemaphoreGive(Binary_Sema);
+                    xSemaphoreGive(buttons.lock);
+                    
+                }
+                if(buttons.buttons[KEYCODE(H)])
+                {
+                    xTaskNotifyGive(Display_H);
+                }
+
+            }
+        }
+        CheckStateInput();
+    }
+}
+
+
+void DisplayH(void *pvParameters)
+{
+    static int string_width = 20;
+    static int string_height = 20;
+    int counter = 0;
+    char Counter[50];
+    ulTaskNotifyTake(pdTRUE,portMAX_DELAY);
+//     int counter = 0;
+    signed short xString = SCREEN_WIDTH/2 + 200;
+    signed short yString = SCREEN_HEIGHT/2 + 100;
+    TickType_t last_change = xTaskGetTickCount();
+    TickType_t debounce_delay = 5;
+    gfxDrawBindThread();
+    while(1)
+    {
+            if (xSemaphoreTake(DrawSignal, portMAX_DELAY) == pdTRUE)
+        {
+            gfxEventFetchEvents(FETCH_EVENT_NONBLOCK);
+            if(xSemaphoreTake(buttons.lock,0)==pdTRUE)
+            {     
+                if(xQueueReceive(buttonInputQueue, &buttons.buttons, 0) == pdTRUE)
+                {
+                    if(xTaskGetTickCount()-last_change>debounce_delay)
+                    {
+                        if(buttons.buttons[KEYCODE(H)])
+                        {
+                            counter = counter+1;
+                        }
+                        last_change = xTaskGetTickCount();
+                    }
+                }    
+                xSemaphoreGive(buttons.lock);
+            }
+                
+            sprintf(Counter,"Times that H is pressed: %d",counter);
+            if (!gfxGetTextSize(Counter, &string_width, &string_height))
+            {
+                gfxDrawText(Counter,xString ,yString,Black);
+
+            }
+            gfxDrawClear(White);
+
+        }
+        CheckStateInput();
+    }   
+        
+}
+
+
+
+// void IncreaseVariable(void *pvParameters)
+// {
+//     // 
+//     static int Task_State = 1; 
+//     while(1)
+//     {
+
+//         if(Task_State==TASK_STOP)
+//         {
+//             vTaskSuspend(Increase_Variable);
+//         }
+//         gfxEventFetchEvents(FETCH_EVENT_NONBLOCK); 
+//         xGetButtonInput();
+//         if (xSemaphoreTake(buttons.lock, 0) == pdTRUE) 
+//         {
+//             if(buttons.buttons[KEYCODE(N)])
+//             {
+//                 if(buttons.buttons[KEYCODE(M)]);
+//             }
+//             if(buttons.buttons[KEYCODE(M)])
+//             {
+//                 Task_State = !Task_State;
+//             }
+//             xSemaphoreGive(buttons.lock);
+//         }
+//         if(Task_State!=TASK_STOP)
+//         {
+//             vTaskResume(Increase_Variable);
+//         }
+        
+//         gfxEventFetchEvents(FETCH_EVENT_NONBLOCK); 
+//         xGetButtonInput();
+//         CheckStateInput();  
+//     }
+// }
 
 
 void ExerciseTwo(void *pvParameters)
@@ -476,8 +690,7 @@ void ExerciseTwo(void *pvParameters)
                     if(XString_Left + string_width >= SCREEN_WIDTH)
                     {
                         MoveDirection = 1;                       
-                        //strcpy(mouse_coord,mouse_Xcoord);
-                        //strcpy(mouse_coord,mouse_Ycoord);
+                     
                     }
                 }
                 else
@@ -501,14 +714,7 @@ void ExerciseTwo(void *pvParameters)
                         
                     
                 }
-                // if (!gfxGetTextSize((char*)mouse_coord, &string_width, &string_height))
-                // {   
-                //     if(xSemaphoreTake(mouse.lock,0)==pdTRUE)
-                //     {
-                //         gfxDrawText(mouse_coord,mouse.x,mouse.y,Black);
-                //         xSemaphoreGive(mouse.lock);
-                //     }
-                // }
+                
                 gfxDrawCircle(Xcoord_Circle_Centre,Ycoord_Circle_Centre,radius,Gray);
                 gfxDrawFilledBox(Xcoord_Square_LP,Ycoord_Square_LP,Square_Width,Square_Height,Blue);
                 gfxDrawTriangle(Triangle_Points, Green);
@@ -530,16 +736,12 @@ int main(int argc, char *argv[])
     //  scheduler is started. There are thread safe print functions in
     //  gfx_Print.h, `prints` and `fprints` that work exactly the same as
     //  `printf` and `fprintf`. So you can read the documentation on these
-    //  functions to understand the functionality.
-
-    if (gfxDrawInit(bin_folder_path)) {
-        PRINT_ERROR("Failed to intialize drawing");
+    //  functions to understand the functionality.if(Increase_Variable)
+  
+    if(gfxDrawInit(bin_folder_path)){
+        PRINT_ERROR("Failed to initialize drawing");
         goto err_init_drawing;
     }
-    else {
-        prints("drawing");
-    }
-
     if (gfxEventInit()) {
         PRINT_ERROR("Failed to initialize events");
         goto err_init_events;
@@ -581,11 +783,11 @@ int main(int argc, char *argv[])
 
     if (xTaskCreate(ExerciseTwo, "Exercise2", mainGENERIC_STACK_SIZE * 2, NULL,
                     mainGENERIC_PRIORITY, &Exercise_two) != pdPASS) {
-        goto err_demotask;
+        goto err_init_drawing;
     }
 
     if (xTaskCreate(ExerciseThree, "Exercise3", mainGENERIC_STACK_SIZE * 2, NULL,
-                    mainGENERIC_PRIORITY, &Exercise_three) != pdPASS) {
+                    configMAX_PRIORITIES-2/*mainGENERIC_PRIORITY+4*/, &Exercise_three) != pdPASS) {
         goto err_demotask;
     }
 
@@ -602,17 +804,39 @@ int main(int argc, char *argv[])
         PRINT_TASK_ERROR("BufferSwapTask");
         goto err_bufferswap;
     }
-     
-    Second_toggle_cir = xTaskCreateStatic(SecondToggleCircle, "SecondToggleCircle",STACK_SIZE, NULL,
-                    mainGENERIC_PRIORITY,Stack_Buffer,&TaskControlBlock);
+    xTaskCreate(DisplayG, "Display_G",
+                    mainGENERIC_STACK_SIZE * 2, NULL, mainGENERIC_PRIORITY,
+                    &Display_G);
+
+    xTaskCreate(TriggerDisplay, "Trigger_Display",
+                    mainGENERIC_STACK_SIZE * 2, NULL, mainGENERIC_PRIORITY+4,
+                    &Trigger_Display);
+    xTaskCreate(DisplayH, "Display_H",
+                    mainGENERIC_STACK_SIZE * 2, NULL, mainGENERIC_PRIORITY+4,
+                    &Display_H);
     
+
+    // if (xTaskCreate(IncreaseVariable, "IncreaseVariable",
+    //                 mainGENERIC_STACK_SIZE * 2, NULL, mainGENERIC_PRIORITY+2,
+    //                 &Increase_Variable) != pdPASS) {
+    //     PRINT_TASK_ERROR("IncreaseVariable");
+    //     goto err_demotask;
+    // }
+    
+    Second_toggle_cir = xTaskCreateStatic(SecondToggleCircle, "SecondToggleCircle",STACK_SIZE, NULL,
+                    mainGENERIC_PRIORITY+3,Stack_Buffer,&TaskControlBlock);
+    
+    Binary_Sema = xSemaphoreCreateBinary();
+
 
 
     vTaskSuspend(Exercise_two);
     vTaskSuspend(Exercise_three); 
-    vTaskSuspend(Second_toggle_cir);// Task is created in a ready state 
-    // Because we should have the state machine to decide which tasks are ready or suspended
-    // So we suspend all other tasks to let the state machine run
+    vTaskSuspend(Second_toggle_cir);
+    vTaskSuspend(Display_G);
+    vTaskSuspend(Display_H);
+    vTaskSuspend(Trigger_Display);
+
     vTaskStartScheduler();
 
     return EXIT_SUCCESS;
