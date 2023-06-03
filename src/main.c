@@ -21,6 +21,7 @@
 #include "gfx_print.h"
 #include "draw.h"
 #include <math.h>
+
 #ifdef TRACE_FUNCTIONS
 #include "tracer.h"
 #endif
@@ -31,6 +32,7 @@
 #define mainGENERIC_STACK_SIZE ((unsigned short)2560)
 #define STACK_SIZE 10
 #define STATE_QUEUE_LENGTH 1
+#define PRESS_QUEUE_LENGTH 1
 
 #define Gray   (unsigned int)(0x808080)
 #define Blue   (unsigned int)(0x0000FF)
@@ -38,10 +40,12 @@
 #define StateOne 0
 #define StateTwo 1
 #define StateThree 2
+#define StateFour 3
+#define StateFive 4
 #define StartingState StateOne
 #define NEXT_TASK 1
 #define PREV_TASK 0
-#define STATE_COUNT 2
+#define STATE_COUNT 5
 #define TASK_STOP 0
 
 static StaticTask_t TaskControlBlock; 
@@ -55,15 +59,24 @@ static TaskHandle_t Exercise_three = NULL;
 static TaskHandle_t Second_toggle_cir = NULL;
 static TaskHandle_t Display_G = NULL;
 static TaskHandle_t Display_H = NULL;
-static TaskHandle_t Trigger_Display = NULL;
+static TaskHandle_t Semaphore_Trigger = NULL;
+static TaskHandle_t TaskNotify_Trigger = NULL;
+static TaskHandle_t Reset_Number = NULL;
+static TaskHandle_t Increase_Variable = NULL;
+static TaskHandle_t Resume_Increase_Variable = NULL;
+static TaskHandle_t Task_one, Task_two, Task_three, Task_four, Output_Task;
 
+static SemaphoreHandle_t Sema_Wake_Three;
 static SemaphoreHandle_t Binary_Sema;
 
-// static TaskHandle_t Exercise_four = NULL;
+
+
 
 static QueueHandle_t StateQueue = NULL;
-
+static QueueHandle_t Press_Queue = NULL;
 SemaphoreHandle_t DrawSignal = NULL;
+
+
 
 typedef struct buttons_buffer 
 {
@@ -140,6 +153,218 @@ void changeState(unsigned char* state, unsigned char change)
     }
 }
 
+static char Output_Buffer1[20]= {0};
+static char Output_Buffer2[20]= {0};
+static char Output_Buffer3[20]= {0};
+static char Output_Buffer4[20]= {0};
+
+void TaskOne(void *pvParameters)
+{
+    TickType_t LastWake = xTaskGetTickCount();
+    TickType_t Initial = xTaskGetTickCount();
+    TickType_t Output_Period = 1;
+    int counter = 0;
+    while(1)
+    {   
+        printf("Task one %d\n",xTaskGetTickCount());
+        sprintf(&Output_Buffer1[counter],"1");
+        counter++;
+        if(xTaskGetTickCount()-Initial>=15)
+        {
+            vTaskDelete(Task_one);
+            break;
+        }
+        vTaskDelayUntil(&LastWake,Output_Period);
+        LastWake = xTaskGetTickCount();
+        
+    }
+}
+
+void TaskTwo(void *pvParameters)
+{
+    TickType_t LastWake = xTaskGetTickCount();
+    TickType_t Initial = xTaskGetTickCount();
+    TickType_t Output_Period = 2;
+    int counter = 1;
+    while(1)
+    {
+        printf("Task two %d\n",xTaskGetTickCount());
+        vTaskDelayUntil(&LastWake,Output_Period);
+        sprintf(&Output_Buffer2[counter],"2");
+        counter = counter + 2;
+         if(xTaskGetTickCount()-Initial>=15)
+        {
+            vTaskDelete(Task_two);
+            break;
+        }
+        xSemaphoreGive(Sema_Wake_Three);
+        LastWake = xTaskGetTickCount();
+    }
+}
+
+void TaskThree(void *pvParameters)
+{
+    TickType_t Initial = xTaskGetTickCount();
+    TickType_t Output_Period = 2;
+    int counter = 3;
+    while(1)
+    {
+        printf("Task three %d\n",xTaskGetTickCount());
+        xSemaphoreTake(Sema_Wake_Three,portMAX_DELAY);
+        sprintf(&Output_Buffer3[counter],"3");
+        counter = counter + Output_Period;
+        if(xTaskGetTickCount()-Initial>=15)
+        {
+            vTaskDelete(Task_three);
+            break;
+        }
+    }
+}
+
+void TaskFour(void *pvParameters)
+{
+    TickType_t LastWake = xTaskGetTickCount();
+    TickType_t Initial = xTaskGetTickCount();
+    TickType_t Output_Period = 4;
+    int counter = 3;
+
+        while(1)
+    {
+        printf("Task four %d\n",xTaskGetTickCount());
+        vTaskDelayUntil(&LastWake,Output_Period);
+        sprintf(&Output_Buffer4[counter],"4");
+        counter = counter + Output_Period;
+        if(xTaskGetTickCount()-Initial>=15)
+        {
+            vTaskDelete(Task_four);
+            break;
+        }
+        LastWake = xTaskGetTickCount();
+    }
+}
+
+void OutputTask(void *pvParameters)
+{
+    TickType_t LastWake = xTaskGetTickCount();
+
+    static int string_width = 20;
+    static int string_height = 20;
+    signed short xString = SCREEN_WIDTH/2 - 200;
+    signed short YString1 = 10;
+    signed short line_distance = 15;
+    char Tick1[50];
+    char Tick2[50];
+    char Tick3[50];
+    char Tick4[50];
+    char Tick5[50];
+    char Tick6[50];
+    char Tick7[50];
+    char Tick8[50];
+    char Tick9[50];
+    char Tick10[50];
+    char Tick11[50];
+    char Tick12[50];
+    char Tick13[50];
+    char Tick14[50];
+    char Tick15[50];
+    gfxDrawBindThread();
+   
+    while (1)
+    {
+        if(xSemaphoreTake(DrawSignal,portMAX_DELAY)==pdTRUE)
+        {
+            gfxDrawClear(White);
+            if(LastWake==xTaskGetTickCount())
+            {
+                xTaskDelayUntil(&LastWake,16);
+            }
+            sprintf(Tick1,"Tick 1 :%c %c %c %c",Output_Buffer1[0],Output_Buffer2[0],Output_Buffer3[0],Output_Buffer4[0]);
+            sprintf(Tick2,"Tick 2 :%c %c %c %c",Output_Buffer1[1],Output_Buffer2[1],Output_Buffer3[1],Output_Buffer4[1]);
+            sprintf(Tick3,"Tick 3 :%c %c %c %c",Output_Buffer1[2],Output_Buffer2[2],Output_Buffer3[2],Output_Buffer4[2]);
+            sprintf(Tick4,"Tick 4 :%c %c %c %c",Output_Buffer1[3],Output_Buffer2[3],Output_Buffer3[3],Output_Buffer4[3]);
+            sprintf(Tick5,"Tick 5 :%c %c %c %c",Output_Buffer1[4],Output_Buffer2[4],Output_Buffer3[4],Output_Buffer4[4]);
+            sprintf(Tick6,"Tick 6 :%c %c %c %c",Output_Buffer1[5],Output_Buffer2[5],Output_Buffer3[5],Output_Buffer4[5]);
+            sprintf(Tick7,"Tick 7 :%c %c %c %c",Output_Buffer1[6],Output_Buffer2[6],Output_Buffer3[6],Output_Buffer4[6]);
+            sprintf(Tick8,"Tick 8 :%c %c %c %c",Output_Buffer1[7],Output_Buffer2[7],Output_Buffer3[7],Output_Buffer4[7]);
+            sprintf(Tick9,"Tick 9 :%c %c %c %c",Output_Buffer1[8],Output_Buffer2[8],Output_Buffer3[8],Output_Buffer4[8]);
+            sprintf(Tick10,"Tick 10 :%c %c %c %c",Output_Buffer1[9],Output_Buffer2[9],Output_Buffer3[9],Output_Buffer4[9]);
+            sprintf(Tick11,"Tick 11 :%c %c %c %c",Output_Buffer1[10],Output_Buffer2[10],Output_Buffer3[10],Output_Buffer4[10]);
+            sprintf(Tick12,"Tick 12 :%c %c %c %c",Output_Buffer1[11],Output_Buffer2[11],Output_Buffer3[11],Output_Buffer4[11]);
+            sprintf(Tick13,"Tick 13 :%c %c %c %c",Output_Buffer1[12],Output_Buffer2[12],Output_Buffer3[12],Output_Buffer4[12]);
+            sprintf(Tick14,"Tick 14 :%c %c %c %c",Output_Buffer1[13],Output_Buffer2[13],Output_Buffer3[13],Output_Buffer4[13]);
+            sprintf(Tick15,"Tick 15 :%c %c %c %c",Output_Buffer1[14],Output_Buffer2[14],Output_Buffer3[14],Output_Buffer4[14]);
+
+            if(!gfxGetTextSize(Tick1,&string_width,&string_height))
+            {
+                gfxDrawText(Tick1,xString,YString1,Black);
+            }
+            if(!gfxGetTextSize(Tick2,&string_width,&string_height))
+            {
+                gfxDrawText(Tick2,xString,YString1+line_distance,Black);
+            }
+             if(!gfxGetTextSize(Tick3,&string_width,&string_height))
+            {
+                gfxDrawText(Tick3,xString,YString1+2*line_distance,Black);
+            }
+            if(!gfxGetTextSize(Tick4,&string_width,&string_height))
+            {
+                gfxDrawText(Tick4,xString,YString1+3*line_distance,Black);
+            }
+            if(!gfxGetTextSize(Tick5,&string_width,&string_height))
+            {
+                gfxDrawText(Tick5,xString,YString1+4*line_distance,Black);
+            }
+            if(!gfxGetTextSize(Tick6,&string_width,&string_height))
+            {
+                gfxDrawText(Tick6,xString,YString1+5*line_distance,Black);
+            }
+            if(!gfxGetTextSize(Tick7,&string_width,&string_height))
+            {
+                gfxDrawText(Tick7,xString,YString1+6*line_distance,Black);
+            }
+            if(!gfxGetTextSize(Tick8,&string_width,&string_height))
+            {
+                gfxDrawText(Tick8,xString,YString1+7*line_distance,Black);
+            }
+            if(!gfxGetTextSize(Tick9,&string_width,&string_height))
+            {
+                gfxDrawText(Tick9,xString,YString1+8*line_distance,Black);
+            }
+            if(!gfxGetTextSize(Tick10,&string_width,&string_height))
+            {
+                gfxDrawText(Tick10,xString,YString1+9*line_distance,Black);
+            }
+            if(!gfxGetTextSize(Tick11,&string_width,&string_height))
+            {
+                gfxDrawText(Tick11,xString,YString1+10*line_distance,Black);
+            } 
+            if(!gfxGetTextSize(Tick12,&string_width,&string_height))
+            {
+                gfxDrawText(Tick12,xString,YString1+11*line_distance,Black);
+            }
+            if(!gfxGetTextSize(Tick13,&string_width,&string_height))
+            {
+                gfxDrawText(Tick13,xString,YString1+12*line_distance,Black);
+            }
+            if(!gfxGetTextSize(Tick14,&string_width,&string_height))
+            {
+                gfxDrawText(Tick14,xString,YString1+13*line_distance,Black);
+            }
+            if(!gfxGetTextSize(Tick15,&string_width,&string_height))
+            {
+                gfxDrawText(Tick15,xString,YString1+14*line_distance,Black);
+            }
+            gfxDrawUpdateScreen();
+
+        }
+
+    }
+    
+    
+}
+
+
+
 void vSwapBuffers(void *pvParameters)
 {
     TickType_t xLastWakeTime;
@@ -160,8 +385,7 @@ void SequentialStateMachine(void *pvParameters)
     unsigned char current_state =  StartingState;
     unsigned char state_changed = 1;
     unsigned char input = 0;
-    // static  const TickType_t debounceDelay = 5;
-    // TickType_t last_change = xTaskGetTickCount();
+
     
     while (1)
     {   
@@ -207,22 +431,38 @@ void SequentialStateMachine(void *pvParameters)
                     {
                         vTaskSuspend(Display_G);
                     }
-                    if(Trigger_Display)
+                    if(Semaphore_Trigger)
                     {
-                        vTaskSuspend(Trigger_Display);
+                        vTaskSuspend(Semaphore_Trigger);
                     }
                     if(Display_H)
                     {
                         vTaskSuspend(Display_H);
                     }
-                    // if(Increase_Variable)
-                    // {
-                    //     vTaskResume(Increase_Variable);
-                    // }
-                    // if(Exercise_four)
-                    // {
-                    //     vTaskSuspend(Exercise_four);
-                    // }
+                    if(TaskNotify_Trigger)
+                    {
+                        vTaskSuspend(TaskNotify_Trigger);
+                    }
+                    if(Reset_Number)
+                    {
+                        vTaskSuspend(Reset_Number);
+                    }
+                     if(Increase_Variable)
+                    {
+                        vTaskSuspend(Increase_Variable);
+                    }
+                    if(Resume_Increase_Variable)
+                    {
+                        vTaskSuspend(Resume_Increase_Variable);
+                    }
+                    if(Task_one||Task_two||Task_three||Task_four||Output_Task)
+                    {
+                        vTaskSuspend(Task_one);
+                        vTaskSuspend(Task_two);
+                        vTaskSuspend(Task_three);
+                        vTaskSuspend(Task_four);
+                        vTaskSuspend(Output_Task);
+                    }
                     break;
                 case (StateTwo): // State2 corresponds to exercise3
                     if(Exercise_two)
@@ -239,39 +479,192 @@ void SequentialStateMachine(void *pvParameters)
                     }
                     if(Display_G)
                     {
+                        vTaskSuspend(Display_G);
+                    }
+                    if(Semaphore_Trigger)
+                    {
+                        vTaskSuspend(Semaphore_Trigger);
+                    }
+                    if(Display_H)
+                    {
+                        vTaskSuspend(Display_H);
+                    }
+                    if(TaskNotify_Trigger)
+                    {
+                        vTaskSuspend(TaskNotify_Trigger);
+                    }
+                    if(Reset_Number)
+                    {
+                        vTaskSuspend(Reset_Number);
+                    }
+                    if(Increase_Variable)
+                    {
+                        vTaskSuspend(Increase_Variable);
+                    }
+                    if(Resume_Increase_Variable)
+                    {
+                        vTaskSuspend(Resume_Increase_Variable);
+                    }
+                    if(Task_one||Task_two||Task_three||Task_four||Output_Task)
+                    {
+                        vTaskSuspend(Task_one);
+                        vTaskSuspend(Task_two);
+                        vTaskSuspend(Task_three);
+                        vTaskSuspend(Task_four);
+                        vTaskSuspend(Output_Task);
+                    }
+                    break;
+                case (StateThree):
+                    if(Exercise_two)
+                    {
+                        vTaskSuspend(Exercise_two);
+                    }
+                    if(Exercise_three)
+                    {
+                        vTaskSuspend(Exercise_three);
+                    }
+                    if(Second_toggle_cir)
+                    {
+                        vTaskSuspend(Second_toggle_cir);
+                    }
+                     if(Display_G)
+                    {
                         vTaskResume(Display_G);
                     }
-                    if(Trigger_Display)
+                    if(Semaphore_Trigger)
                     {
-                        vTaskResume(Trigger_Display);
+                        vTaskResume(Semaphore_Trigger);
                     }
                     if(Display_H)
                     {
                         vTaskResume(Display_H);
                     }
-                    // if(Increase_Variable)
-                    // {
-                    //     vTaskSuspend(Increase_Variable);
-                    // }
-                    // if(Exercise_four)
-                    // {
-                    //     vTaskSuspend(Exercise_four);
-                    // }
+                    if(TaskNotify_Trigger)
+                    {
+                        vTaskResume(TaskNotify_Trigger);
+                    }
+                     if(Reset_Number)
+                    {
+                        vTaskResume(Reset_Number);
+                    }
+                    if(Increase_Variable)
+                    {
+                        vTaskSuspend(Increase_Variable);
+                    }
+                    if(Resume_Increase_Variable)
+                    {
+                        vTaskSuspend(Resume_Increase_Variable);
+                    }
+                    if(Task_one||Task_two||Task_three||Task_four||Output_Task)
+                    {
+                        vTaskSuspend(Task_one);
+                        vTaskSuspend(Task_two);
+                        vTaskSuspend(Task_three);
+                        vTaskSuspend(Task_four);
+                        vTaskSuspend(Output_Task);
+                    }
                     break;
-                // case (StateThree):
-                //     if(Exercise_two)
-                //     {
-                //         vTaskSuspend(Exercise_two);
-                //     }
-                //     if(Exercise_three)
-                //     {
-                //         vTaskSuspend(Exercise_three);
-                //     }
-                //     if(Exercise_four)
-                //     {
-                //         vTaskResume(Exercise_four);
-                //     }
-                //     break;
+                case (StateFour):
+                    if(Exercise_two)
+                    {
+                        vTaskSuspend(Exercise_two);
+                    }
+                    if(Exercise_three)
+                    {
+                        vTaskSuspend(Exercise_three);
+                    }
+                    if(Second_toggle_cir)
+                    {
+                        vTaskSuspend(Second_toggle_cir);
+                    }
+                    if(Display_G)
+                    {
+                        vTaskSuspend(Display_G);
+                    }
+                    if(Semaphore_Trigger)
+                    {
+                        vTaskSuspend(Semaphore_Trigger);
+                    }
+                    if(Display_H)
+                    {
+                        vTaskSuspend(Display_H);
+                    }
+                    if(TaskNotify_Trigger)
+                    {
+                        vTaskSuspend(TaskNotify_Trigger);
+                    }
+                    if(Reset_Number)
+                    {
+                        vTaskSuspend(Reset_Number);
+                    }
+                    if(Increase_Variable)
+                    {
+                        vTaskResume(Increase_Variable);
+                    }
+                    if(Resume_Increase_Variable)
+                    {
+                        vTaskResume(Resume_Increase_Variable);
+                    }
+                    if(Task_one||Task_two||Task_three||Task_four||Output_Task)
+                    {
+                        vTaskSuspend(Task_one);
+                        vTaskSuspend(Task_two);
+                        vTaskSuspend(Task_three);
+                        vTaskSuspend(Task_four);
+                        vTaskSuspend(Output_Task);
+                    }
+                    break;
+                case (StateFive):
+                    if(Exercise_two)
+                    {
+                        vTaskSuspend(Exercise_two);
+                    }
+                    if(Exercise_three)
+                    {
+                        vTaskSuspend(Exercise_three);
+                    }
+                    if(Second_toggle_cir)
+                    {
+                        vTaskSuspend(Second_toggle_cir);
+                    }
+                    if(Display_G)
+                    {
+                        vTaskSuspend(Display_G);
+                    }
+                    if(Semaphore_Trigger)
+                    {
+                        vTaskSuspend(Semaphore_Trigger);
+                    }
+                    if(Display_H)
+                    {
+                        vTaskSuspend(Display_H);
+                    }
+                    if(TaskNotify_Trigger)
+                    {
+                        vTaskSuspend(TaskNotify_Trigger);
+                    }
+                    if(Reset_Number)
+                    {
+                        vTaskSuspend(Reset_Number);
+                    }
+                    if(Increase_Variable)
+                    {
+                        vTaskSuspend(Increase_Variable);
+                    }
+                    if(Resume_Increase_Variable)
+                    {
+                        vTaskSuspend(Resume_Increase_Variable);
+                    }
+                    if(Task_one||Task_two||Task_three||Task_four||Output_Task)
+                    {
+                        vTaskResume(Task_one);
+                        vTaskResume(Task_two);
+                        vTaskResume(Task_three);
+                        vTaskResume(Task_four);
+                        vTaskResume(Output_Task);
+                    }
+                    break;
+
                 default:
                     break;
             }
@@ -292,16 +685,18 @@ void ExerciseThree(void *pvParameters)
     gfxDrawBindThread();
       while (1) 
     {
+        
         if (DrawSignal) // To verify if there is a semaphore handle
         {
             if (xSemaphoreTake(DrawSignal, portMAX_DELAY) == pdTRUE)
             {
                 gfxDrawClear(White);
+                vDrawFPS();
                 if(flag==1)
                 {
                     gfxDrawCircle(Xcoord_Circle_Centre+4*radius,Ycoord_Circle_Centre,radius,Blue);
                 }
-                vDrawFPS();
+                
                 if(xTaskGetTickCount()-last_change>=Delay)
                 {
                     flag = !flag;
@@ -333,9 +728,10 @@ void SecondToggleCircle(void *pvParameters)
         {
             if (xSemaphoreTake(DrawSignal, portMAX_DELAY) == pdTRUE)
             {
-                gfxDrawClear(White);
+                
                 if(flag==1)
                 {
+                    gfxDrawClear(White);
                     gfxDrawCircle(Xcoord_Circle_Centre-4*radius,Ycoord_Circle_Centre,radius,Black);
                 }
                 vDrawFPS();
@@ -365,13 +761,18 @@ void DisplayG(void *pvParameters)
     signed short yString = SCREEN_HEIGHT/2 + 100;
     TickType_t last_change = xTaskGetTickCount();
     TickType_t debounce_delay = 5;
+    TickType_t last_reset = xTaskGetTickCount();
+    TickType_t reset_period = 15000;
     gfxDrawBindThread();
+    xSemaphoreTake(Binary_Sema,portMAX_DELAY);
+    //printf("111\n"); 
     while(1)
     {
-            if (xSemaphoreTake(DrawSignal, portMAX_DELAY) == pdTRUE)
+            if(xSemaphoreTake(DrawSignal, portMAX_DELAY) == pdTRUE)
         {
-            xSemaphoreTake(Binary_Sema,portMAX_DELAY);       
+            gfxDrawClear(White);
             gfxEventFetchEvents(FETCH_EVENT_NONBLOCK);
+            //printf("111\n");
             if(xSemaphoreTake(buttons.lock,0)==pdTRUE)
             {     
                 if(xQueueReceive(buttonInputQueue, &buttons.buttons, 0) == pdTRUE)
@@ -381,56 +782,94 @@ void DisplayG(void *pvParameters)
                         if(buttons.buttons[KEYCODE(G)])
                         {
                             counter = counter+1;
+                            last_change = xTaskGetTickCount();
+
                         }
-                        last_change = xTaskGetTickCount();
+                        
                     }
                 }    
                 xSemaphoreGive(buttons.lock);
             }
-                
+
+            if(xTaskGetTickCount()-last_reset>reset_period)
+                {
+                    xQueueReceive(Press_Queue,&counter,0);
+                    last_reset = xTaskGetTickCount();
+                }
+
             sprintf(Counter,"Times that G is pressed: %d",counter);
             if (!gfxGetTextSize(Counter, &string_width, &string_height))
             {
                 gfxDrawText(Counter,xString ,yString,Black);
 
             }
-            gfxDrawClear(White);
-
-        }
+            vDrawFPS();
+            gfxDrawUpdateScreen();
         CheckStateInput();
+        }
+        
     }   
         
 }
 
 
-void TriggerDisplay(void *pvParameters)
+void SemaphoreTrigger(void *pvParameters)
 {
-
+    gfxDrawBindThread();
     while(1)
     {
-        gfxEventFetchEvents(FETCH_EVENT_NONBLOCK);   
-        if(xSemaphoreTake(Binary_Sema,0)==pdTRUE)
-        {
+        // printf("the trigger is activated\n");
+        if (xSemaphoreTake(DrawSignal, portMAX_DELAY) == pdTRUE)
+        {   
+            gfxDrawClear(White);
+            vDrawFPS();
+            gfxEventFetchEvents(FETCH_EVENT_NONBLOCK);   
+            xSemaphoreTake(Binary_Sema,0);
             xGetButtonInput();
-            if(xSemaphoreTake(buttons.lock,0)==pdTRUE)
-            {
-                if(buttons.buttons[KEYCODE(G)])
+                if(xSemaphoreTake(buttons.lock,0)==pdTRUE)
                 {
-                    xSemaphoreGive(Binary_Sema);
+                    //printf("222\n");
+                    if(buttons.buttons[KEYCODE(G)])
+                    {
+                        //printf("111\n");
+                        xSemaphoreGive(Binary_Sema);
+                        xSemaphoreGive(buttons.lock);
+                        vTaskSuspend(Semaphore_Trigger);
+                    }
                     xSemaphoreGive(buttons.lock);
-                    
                 }
-                if(buttons.buttons[KEYCODE(H)])
-                {
-                    xTaskNotifyGive(Display_H);
-                }
-
-            }
+            gfxDrawUpdateScreen();
+            CheckStateInput();
         }
-        CheckStateInput();
     }
 }
 
+void TaskNotifyTrigger(void *pvParameters)
+{
+    gfxDrawBindThread();
+    while (1)
+    {
+        if (xSemaphoreTake(DrawSignal, portMAX_DELAY) == pdTRUE)
+        {
+            
+            gfxEventFetchEvents(FETCH_EVENT_NONBLOCK);   
+            xGetButtonInput();
+            if(xSemaphoreTake(buttons.lock,0)==pdTRUE)
+                {
+                    if(buttons.buttons[KEYCODE(H)])
+                    {
+                        buttons.buttons[KEYCODE(H)]=0;
+                        xTaskNotifyGive(Display_H);
+                        xSemaphoreGive(buttons.lock);
+                    }
+                    xSemaphoreGive(buttons.lock);
+                }
+            CheckStateInput();
+        }
+    }
+    
+    
+}
 
 void DisplayH(void *pvParameters)
 {
@@ -438,86 +877,166 @@ void DisplayH(void *pvParameters)
     static int string_height = 20;
     int counter = 0;
     char Counter[50];
-    ulTaskNotifyTake(pdTRUE,portMAX_DELAY);
-//     int counter = 0;
-    signed short xString = SCREEN_WIDTH/2 + 200;
+    signed short xString = SCREEN_WIDTH/2 + 100;
     signed short yString = SCREEN_HEIGHT/2 + 100;
     TickType_t last_change = xTaskGetTickCount();
     TickType_t debounce_delay = 5;
+    TickType_t last_reset = xTaskGetTickCount();
+    TickType_t reset_period = 15000;
+    ulTaskNotifyTake(pdTRUE,portMAX_DELAY);
+    //printf("The task is triggered\n");   
     gfxDrawBindThread();
     while(1)
     {
-            if (xSemaphoreTake(DrawSignal, portMAX_DELAY) == pdTRUE)
+        if (xSemaphoreTake(DrawSignal, portMAX_DELAY) == pdTRUE)
         {
             gfxEventFetchEvents(FETCH_EVENT_NONBLOCK);
-            if(xSemaphoreTake(buttons.lock,0)==pdTRUE)
-            {     
-                if(xQueueReceive(buttonInputQueue, &buttons.buttons, 0) == pdTRUE)
-                {
-                    if(xTaskGetTickCount()-last_change>debounce_delay)
-                    {
-                        if(buttons.buttons[KEYCODE(H)])
-                        {
-                            counter = counter+1;
-                        }
-                        last_change = xTaskGetTickCount();
-                    }
-                }    
-                xSemaphoreGive(buttons.lock);
-            }
-                
-            sprintf(Counter,"Times that H is pressed: %d",counter);
-            if (!gfxGetTextSize(Counter, &string_width, &string_height))
-            {
-                gfxDrawText(Counter,xString ,yString,Black);
-
-            }
             gfxDrawClear(White);
+            vDrawFPS();
+                if(xSemaphoreTake(buttons.lock,0)==pdTRUE)
+                {     
+                    if(xQueueReceive(buttonInputQueue, &buttons.buttons, 0) == pdTRUE)
+                    {
+                        if(xTaskGetTickCount()-last_change>debounce_delay)
+                        {
+                            if(buttons.buttons[KEYCODE(H)])
+                            {
+                                counter = counter+1;
+                                last_change = xTaskGetTickCount();
+                            }
+                            
+                        }
+                    }    
+                    xSemaphoreGive(buttons.lock);
+                }
+                if(xTaskGetTickCount()-last_reset>reset_period)
+                {
+                    xQueueReceive(Press_Queue,&counter,0);
+                    last_reset = xTaskGetTickCount();
+                }
+                vDrawFPS();
+                sprintf(Counter,"Times that H is pressed: %d",counter);
+                if (!gfxGetTextSize(Counter, &string_width, &string_height))
+                {
+                    gfxDrawText(Counter,xString ,yString,Black);
 
-        }
-        CheckStateInput();
+                }
+                gfxDrawUpdateScreen();
+            CheckStateInput();
+            }
+            
     }   
         
 }
 
+void ResetNumber(void *pvParameters)
+{
+    TickType_t last_change = xTaskGetTickCount();
+    TickType_t Reset_Period = 15000;
+    int reset = 0;
+    while(1)
+    {
+        if(xTaskGetTickCount()-last_change < Reset_Period)
+        {
+            vTaskDelayUntil(&last_change,Reset_Period);
+            last_change = xTaskGetTickCount();
+            printf("The press times are reset\n");
+            xQueueSend(Press_Queue,&reset,0);
+        }
+    }
+}
 
 
-// void IncreaseVariable(void *pvParameters)
-// {
-//     // 
-//     static int Task_State = 1; 
-//     while(1)
-//     {
+void IncreaseVariable(void *pvParameters)
+{
+    TickType_t last_increase = xTaskGetTickCount();
+    TickType_t increase_period = 1000;
+    TickType_t last_press = xTaskGetTickCount();
+    TickType_t Debounce_delay = 5;
+    int variable = 0;
+    char Variable[50];
+    static int string_width = 20;
+    static int string_height = 20;
+    int xString = SCREEN_WIDTH/2 - 100;
+    gfxDrawBindThread();
+    while(1)
+    {
+        if(xSemaphoreTake(DrawSignal,portMAX_DELAY) == pdTRUE)
+        {
+            gfxDrawClear(White);
+            gfxEventFetchEvents(FETCH_EVENT_NONBLOCK);
+            if(xTaskGetTickCount()-last_increase >= increase_period)
+            {
+                variable++;
+                last_increase = xTaskGetTickCount();
+            }
+            
+            if(xSemaphoreTake(buttons.lock,0)==pdTRUE)
+            {
+                if(xTaskGetTickCount()-last_press>Debounce_delay)
+                {
+                    xQueueReceive(buttonInputQueue, &buttons.buttons, 0);
+                    if(buttons.buttons[KEYCODE(X)])
+                    {
+                        xSemaphoreGive(buttons.lock);
+                        vTaskSuspend(Increase_Variable);
+                    }
+                    xSemaphoreGive(buttons.lock);
+                }
+            }
+            vDrawFPS();
+            sprintf(Variable,"The variable is: %d now.",variable);
+                if (!gfxGetTextSize(Variable, &string_width, &string_height))
+                {
+                    gfxDrawText(Variable,xString ,SCREEN_HEIGHT/2,Black);
 
-//         if(Task_State==TASK_STOP)
-//         {
-//             vTaskSuspend(Increase_Variable);
-//         }
-//         gfxEventFetchEvents(FETCH_EVENT_NONBLOCK); 
-//         xGetButtonInput();
-//         if (xSemaphoreTake(buttons.lock, 0) == pdTRUE) 
-//         {
-//             if(buttons.buttons[KEYCODE(N)])
-//             {
-//                 if(buttons.buttons[KEYCODE(M)]);
-//             }
-//             if(buttons.buttons[KEYCODE(M)])
-//             {
-//                 Task_State = !Task_State;
-//             }
-//             xSemaphoreGive(buttons.lock);
-//         }
-//         if(Task_State!=TASK_STOP)
-//         {
-//             vTaskResume(Increase_Variable);
-//         }
-        
-//         gfxEventFetchEvents(FETCH_EVENT_NONBLOCK); 
-//         xGetButtonInput();
-//         CheckStateInput();  
-//     }
-// }
+                }
+                gfxDrawUpdateScreen();
+            CheckStateInput();
+        }
 
+    }
+}
+
+void ResumeIncreaseVariable(void *pvParameters)
+{
+    static int string_width = 20;
+    static int string_height = 20;
+    int xString = SCREEN_WIDTH/2 - 100;
+    char String[50] = "The increase of the variable is stopped.";
+    TickType_t last_press = xTaskGetTickCount();
+    TickType_t Debounce_delay = 5;
+    gfxDrawBindThread();
+    while(1)
+    {
+        if(xSemaphoreTake(DrawSignal,portMAX_DELAY) == pdTRUE)
+        {   
+             gfxDrawClear(White);
+             gfxEventFetchEvents(FETCH_EVENT_NONBLOCK);
+             if(xSemaphoreTake(buttons.lock,0)== pdTRUE)
+            {
+                if(xTaskGetTickCount()-last_press>Debounce_delay)
+                {
+                    xQueueReceive(buttonInputQueue, &buttons.buttons, 0);
+                    if(buttons.buttons[KEYCODE(X)])
+                    {
+                        xSemaphoreGive(buttons.lock);
+                        vTaskResume(Increase_Variable);
+                    }
+                    xSemaphoreGive(buttons.lock);
+                }
+            }
+            if (!gfxGetTextSize(String, &string_width, &string_height))
+                {
+                    gfxDrawText(String,xString ,SCREEN_HEIGHT/2,Black);
+
+                }
+            gfxDrawUpdateScreen();
+            vDrawFPS();
+            CheckStateInput();
+        }
+    }
+}
 
 void ExerciseTwo(void *pvParameters)
 {
@@ -726,6 +1245,7 @@ void ExerciseTwo(void *pvParameters)
     }
 }
 
+
 int main(int argc, char *argv[])
 {
     char *bin_folder_path = gfxUtilGetBinFolderPath(argv[0]);
@@ -775,23 +1295,24 @@ int main(int argc, char *argv[])
         goto err_draw_signal;
     }
 
+    Binary_Sema = xSemaphoreCreateBinary();
+
+    Sema_Wake_Three = xSemaphoreCreateBinary();
+
+
     StateQueue = xQueueCreate(STATE_QUEUE_LENGTH, sizeof(unsigned char));
     if (!StateQueue) {
         PRINT_ERROR("Could not open state queue");
         goto err_state_queue;
     }
+    Press_Queue = xQueueCreate(PRESS_QUEUE_LENGTH,sizeof(int));
 
     if (xTaskCreate(ExerciseTwo, "Exercise2", mainGENERIC_STACK_SIZE * 2, NULL,
                     mainGENERIC_PRIORITY, &Exercise_two) != pdPASS) {
         goto err_init_drawing;
     }
 
-    if (xTaskCreate(ExerciseThree, "Exercise3", mainGENERIC_STACK_SIZE * 2, NULL,
-                    configMAX_PRIORITIES-2/*mainGENERIC_PRIORITY+4*/, &Exercise_three) != pdPASS) {
-        goto err_demotask;
-    }
-
-
+ 
     if (xTaskCreate(SequentialStateMachine, "StateMachine", mainGENERIC_STACK_SIZE * 2, NULL,
                     configMAX_PRIORITIES-1, &StateMachine) != pdPASS) {
         PRINT_TASK_ERROR("StateMachine");
@@ -804,29 +1325,54 @@ int main(int argc, char *argv[])
         PRINT_TASK_ERROR("BufferSwapTask");
         goto err_bufferswap;
     }
+    
     xTaskCreate(DisplayG, "Display_G",
-                    mainGENERIC_STACK_SIZE * 2, NULL, mainGENERIC_PRIORITY,
+                    mainGENERIC_STACK_SIZE * 2, NULL, mainGENERIC_PRIORITY+2,
                     &Display_G);
 
-    xTaskCreate(TriggerDisplay, "Trigger_Display",
-                    mainGENERIC_STACK_SIZE * 2, NULL, mainGENERIC_PRIORITY+4,
-                    &Trigger_Display);
-    xTaskCreate(DisplayH, "Display_H",
-                    mainGENERIC_STACK_SIZE * 2, NULL, mainGENERIC_PRIORITY+4,
-                    &Display_H);
-    
+    xTaskCreate(SemaphoreTrigger, "Semaphore Trigger",
+                    mainGENERIC_STACK_SIZE * 2, NULL, mainGENERIC_PRIORITY+2,
+                    &Semaphore_Trigger);
 
-    // if (xTaskCreate(IncreaseVariable, "IncreaseVariable",
-    //                 mainGENERIC_STACK_SIZE * 2, NULL, mainGENERIC_PRIORITY+2,
-    //                 &Increase_Variable) != pdPASS) {
-    //     PRINT_TASK_ERROR("IncreaseVariable");
-    //     goto err_demotask;
-    // }
+    xTaskCreate(TaskNotifyTrigger, "TaskNotifyTrigger",
+                    mainGENERIC_STACK_SIZE * 2, NULL, mainGENERIC_PRIORITY+2,
+                    &TaskNotify_Trigger);
+    xTaskCreate(DisplayH, "Display_H",
+                    mainGENERIC_STACK_SIZE * 2, NULL, mainGENERIC_PRIORITY+3,
+                    &Display_H);
+    xTaskCreate(ResetNumber,"Reset",mainGENERIC_STACK_SIZE * 2,NULL,mainGENERIC_PRIORITY+4,&Reset_Number);
+
+    xTaskCreate(IncreaseVariable, "IncreaseVariable",
+                    mainGENERIC_STACK_SIZE * 2, NULL, mainGENERIC_PRIORITY+2,
+                    &Increase_Variable);
+    xTaskCreate(ResumeIncreaseVariable, "ResumeIncreaseVariable",
+                    mainGENERIC_STACK_SIZE * 2, NULL, mainGENERIC_PRIORITY+1,
+                    &Resume_Increase_Variable);
+
+    xTaskCreate(TaskOne, "Task1",
+                    mainGENERIC_STACK_SIZE * 2, NULL, mainGENERIC_PRIORITY+1,
+                    &Task_one);
+    xTaskCreate(TaskTwo, "Task2",
+                    mainGENERIC_STACK_SIZE * 2, NULL, mainGENERIC_PRIORITY+2,
+                    &Task_two);
+    xTaskCreate(TaskThree, "Task3",
+                    mainGENERIC_STACK_SIZE * 2, NULL, mainGENERIC_PRIORITY+3,
+                    &Task_three);
+    xTaskCreate(TaskFour, "Task4",
+                    mainGENERIC_STACK_SIZE * 2, NULL, mainGENERIC_PRIORITY+4,
+                    &Task_four);
+    xTaskCreate(OutputTask, "Output Task",
+                    mainGENERIC_STACK_SIZE * 2, NULL, mainGENERIC_PRIORITY,
+                    &Output_Task);
     
+    if (xTaskCreate(ExerciseThree, "Exercise3", mainGENERIC_STACK_SIZE * 2, NULL,
+                    mainGENERIC_PRIORITY+3,&Exercise_three) != pdPASS) {
+        goto err_demotask;
+    }
     Second_toggle_cir = xTaskCreateStatic(SecondToggleCircle, "SecondToggleCircle",STACK_SIZE, NULL,
-                    mainGENERIC_PRIORITY+3,Stack_Buffer,&TaskControlBlock);
+                    mainGENERIC_PRIORITY+1,Stack_Buffer,&TaskControlBlock);
     
-    Binary_Sema = xSemaphoreCreateBinary();
+    
 
 
 
@@ -835,7 +1381,17 @@ int main(int argc, char *argv[])
     vTaskSuspend(Second_toggle_cir);
     vTaskSuspend(Display_G);
     vTaskSuspend(Display_H);
-    vTaskSuspend(Trigger_Display);
+    vTaskSuspend(Semaphore_Trigger);
+    vTaskSuspend(TaskNotify_Trigger);
+    vTaskSuspend(Increase_Variable);
+    vTaskSuspend(Resume_Increase_Variable);
+    vTaskSuspend(Task_one);
+    vTaskSuspend(Task_two);
+    vTaskSuspend(Task_three);
+    vTaskSuspend(Task_four);
+    vTaskSuspend(Output_Task);
+    
+    
 
     vTaskStartScheduler();
 
